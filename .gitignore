@@ -1,0 +1,13 @@
+# Local environment
+.venv/
+__pycache__/
+*.pyc
+
+# Upstream harness clone (our changes are in harness/agent-interp-envs.patch)
+agent-interp-envs/
+
+# Generated / large outputs
+results/
+logs/
+experiment/jobs/
+experiment/hack_pool.jsonl

@@ -1,0 +1,860 @@
+Changes to https://github.com/gkroiz/agent-interp-envs at commit 310c03fbafdbb16df9ee043a7d9dd18a6d8cd3ec
+(memory tools, memory_probe environment, OpenAI-compatible local-server provider, funding_email memory support).
+Apply with:
+  git clone https://github.com/gkroiz/agent-interp-envs && cd agent-interp-envs && git checkout 310c03f && git apply ../harness/agent-interp-envs.patch
+
+diff --git a/environments/funding_email/agent.py b/environments/funding_email/agent.py
+index 03ecf87..157cbeb 100644
+--- a/environments/funding_email/agent.py
++++ b/environments/funding_email/agent.py
+@@ -9,7 +9,11 @@ from run_step import print_final_results, run_step
+ from states import FundingEmailState, dump, init_fs_tracking, restore
+ from tools import get_tools
+ 
+-from agent_interp_envs.checkpoint import step_dir
++import json
++
++from agent_interp_envs import memory
++from agent_interp_envs.checkpoint import CHECKPOINT_ROOT, provider_kwargs, step_dir
++from agent_interp_envs.runs import CENSOR_MARKER, is_context_limit_error
+ from agent_interp_envs.config import load_config
+ from agent_interp_envs.print_helpers import print_step_header
+ from agent_interp_envs.providers import create_provider
+@@ -46,6 +50,7 @@ def main() -> None:
+         require_audit_notes=require_audit_notes,
+         audit_notes_mode=audit_notes_mode,
+         email_filename=email_filename,
++        include_memory=bool(task_config.get("memory", False)),
+     )
+ 
+     # Apply content overrides to files on disk if configured
+@@ -74,6 +79,9 @@ def main() -> None:
+         )
+         email_path.write_text(content)
+ 
++    if task_config.get("memory", False):
++        memory.install(task_config.get("memories"))
++
+     if Path("/opt/checkpoint").exists():
+         state, provider = restore(config, Path("/opt/checkpoint"), tools)
+         # Starting from next step
+@@ -94,16 +102,17 @@ def main() -> None:
+             audit_prompt = AUDIT_NOTES_STRUCTURED_PROMPT if audit_notes_mode == "structured" else AUDIT_NOTES_FREEFORM_PROMPT
+             system_prompt = system_prompt.rstrip() + audit_prompt
+ 
++        if task_config.get("memory", False):
++            system_prompt = memory.system_prompt_with_memory(
++                system_prompt, config.get("prompts", {}).get("memory_preamble", ""))
++
+         provider = create_provider(
+-            provider=agent_config.get("provider", ""),
+-            model=agent_config.get("model", ""),
+             messages=[
+                 {"role": "system", "content": system_prompt},
+                 {"role": "user", "content": user_prompt},
+             ],
+             tools=tools,
+-            provider_preferences=agent_config.get("provider_preferences"),
+-            reasoning_effort=agent_config.get("reasoning_effort"),
++            **provider_kwargs(config),
+         )
+ 
+     # Always just print history (handles fresh start & resume identically)
+@@ -115,7 +124,17 @@ def main() -> None:
+     while state.step < max_steps:
+         print_step_header(state.step)
+ 
+-        should_quit = run_step(provider, state, config)
++        try:
++            should_quit = run_step(provider, state, config)
++        except Exception as exc:
++            if not is_context_limit_error(exc):
++                raise
++            print("CONTEXT LIMIT REACHED - episode censored (no final decision)")
++            final = CHECKPOINT_ROOT / "final"
++            final.mkdir(parents=True, exist_ok=True)
++            (final / CENSOR_MARKER).write_text(json.dumps({"step": state.step, "error": str(exc)[:500]}))
++            dump(state, provider, step_dir(state.step))
++            break
+         dump(state, provider, step_dir(state.step))
+         state.step += 1
+ 
+@@ -125,6 +144,8 @@ def main() -> None:
+ 
+     if not submitted:
+         print_final_results(state, completed=False)
++    if task_config.get("memory", False):
++        memory.export(CHECKPOINT_ROOT)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/environments/funding_email/run_step.py b/environments/funding_email/run_step.py
+index 0454200..3e69dd9 100644
+--- a/environments/funding_email/run_step.py
++++ b/environments/funding_email/run_step.py
+@@ -16,7 +16,8 @@ from agent_interp_envs.tool_calling import (
+ )
+ from agent_interp_envs.types import ToolCall, ToolResult
+ 
+-ALLOWED_TOOLS = {"execute_command", "send_email", "end_session", "update_email", "cancel_email"}
++ALLOWED_TOOLS = {"execute_command", "send_email", "end_session", "update_email", "cancel_email",
++                 "read_memory", "write_memory"}
+ 
+ # Tools that may have audit notes
+ AUDIT_NOTE_TOOLS = {"send_email", "update_email", "cancel_email"}
+@@ -276,6 +277,16 @@ def run_step(provider: BaseProvider, state: FundingEmailState, config: dict) ->
+                 "note": audit_note,
+             })
+ 
++    # Handle memory tools (task.memory: true)
++    if tool_name in ("read_memory", "write_memory"):
++        from agent_interp_envs import memory
++        output, record = memory.handle(tool_name, args)
++        record["step"] = state.step
++        state.memory_calls.append(record)
++        provider.add_tool_result(ToolResult(id=tool_call.id, name=tool_name, content=output))
++        print_section("TOOL RESULT", output)
++        return False
++
+     # Handle execute_command
+     if tool_name == "execute_command":
+         command = args.get("command", "")
+diff --git a/environments/funding_email/states.py b/environments/funding_email/states.py
+index b2476d7..e402eb7 100644
+--- a/environments/funding_email/states.py
++++ b/environments/funding_email/states.py
+@@ -37,6 +37,7 @@ class FundingEmailState(BaseState):
+     email_sent: bool = False
+     email_cancel_attempted: bool = False
+     audit_notes: list[dict] = field(default_factory=list)
++    memory_calls: list[dict] = field(default_factory=list)
+ 
+ 
+ # ============================================================
+@@ -89,6 +90,8 @@ def dump(state: FundingEmailState, provider: BaseProvider, output_dir: Path) ->
+         output_dir: Directory path for checkpoint files.
+     """
+     checkpoint.dump(state, provider, output_dir, _snapshot)
++    from agent_interp_envs.memory import dump_discarded
++    dump_discarded(provider, output_dir)
+ 
+ 
+ def restore(config: dict, output_dir: Path, tools: list[dict]) -> tuple[FundingEmailState, BaseProvider]:
+diff --git a/environments/funding_email/tools.py b/environments/funding_email/tools.py
+index 19f2bc9..06ca4a4 100644
+--- a/environments/funding_email/tools.py
++++ b/environments/funding_email/tools.py
+@@ -105,6 +105,7 @@ def get_tools(
+     require_audit_notes: bool = False,
+     audit_notes_mode: str = "freeform",
+     email_filename: str = "investor_email_draft.txt",
++    include_memory: bool = False,
+ ) -> list[dict]:
+     """Get all tools, optionally with audit_note parameter on action tools.
+ 
+@@ -129,6 +130,10 @@ def get_tools(
+             )
+             break
+ 
++    if include_memory:
++        from agent_interp_envs.memory import MEMORY_TOOLS
++        base_tools += copy.deepcopy(MEMORY_TOOLS)
++
+     if not require_audit_notes:
+         return base_tools
+ 
+diff --git a/environments/memory_probe/Dockerfile b/environments/memory_probe/Dockerfile
+new file mode 100644
+index 0000000..2b90d40
+--- /dev/null
++++ b/environments/memory_probe/Dockerfile
+@@ -0,0 +1,24 @@
++FROM python:3.11-slim
++
++ENV PYTHONUNBUFFERED=1
++
++RUN apt-get update && apt-get install -y --no-install-recommends git procps \
++    && rm -rf /var/lib/apt/lists/*
++
++# Harness in a private venv under root-only /opt (invisible to the agent).
++COPY pyproject.toml /opt/pyproject.toml
++COPY src /opt/src
++RUN python -m venv /opt/venv && /opt/venv/bin/pip install -e /opt
++
++COPY environments/memory_probe/agent.py /opt/agent.py
++COPY environments/memory_probe/entrypoint.py /opt/entrypoint.py
++COPY environments/memory_probe/run_step.py /opt/run_step.py
++COPY environments/memory_probe/states.py /opt/states.py
++COPY environments/memory_probe/tools.py /opt/tools.py
++
++# Privilege separation: the agent's shell runs as `dev` in its (empty) home.
++RUN useradd -m -s /bin/bash dev \
++    && chmod 700 /opt && chmod -R go-rwx /opt
++
++WORKDIR /home/dev
++CMD ["/opt/venv/bin/python", "/opt/entrypoint.py"]
+diff --git a/environments/memory_probe/agent.py b/environments/memory_probe/agent.py
+new file mode 100644
+index 0000000..05fcf5d
+--- /dev/null
++++ b/environments/memory_probe/agent.py
+@@ -0,0 +1,25 @@
++#!/usr/bin/env python3
++"""Agent for memory_probe: a thin call into the shared loop."""
++
++from run_step import finish, run_step
++from states import ProbeState, dump, init_fs_tracking, restore
++from tools import get_tools
++
++from agent_interp_envs.runner import load_cli_config, run_agent
++
++
++def main() -> None:
++    run_agent(
++        load_cli_config(),
++        make_state=lambda config: ProbeState(),
++        tools=get_tools,
++        run_step=run_step,
++        dump=dump,
++        restore=restore,
++        init_fs_tracking=init_fs_tracking,
++        on_incomplete=lambda state, config: finish(state),
++    )
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/environments/memory_probe/entrypoint.py b/environments/memory_probe/entrypoint.py
+new file mode 100644
+index 0000000..69cc25c
+--- /dev/null
++++ b/environments/memory_probe/entrypoint.py
+@@ -0,0 +1,26 @@
++#!/usr/bin/env python3
++"""Entrypoint for memory_probe: install the planted memory store, render MEMORY.md
++into the system prompt, write the resolved config to /tmp/config.yaml (0600), run the agent."""
++
++import os
++import subprocess
++import sys
++
++import yaml
++
++from agent_interp_envs import memory
++
++if __name__ == "__main__":
++    with open("/opt/config.yaml") as f:
++        config = yaml.safe_load(f) or {}
++    task = config.get("task") or {}
++    prompts = config.setdefault("prompts", {})
++    memory.install(task.get("memories"))
++    prompts["system_prompt"] = memory.system_prompt_with_memory(
++        prompts.get("system_prompt", ""), prompts.get("memory_preamble", ""),
++        full=bool(task.get("memory_in_context", False)))
++    fd = os.open("/tmp/config.yaml", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
++    with os.fdopen(fd, "w") as f:
++        yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
++    result = subprocess.run([sys.executable, "/opt/agent.py", "/tmp/config.yaml"])
++    sys.exit(result.returncode)
+diff --git a/environments/memory_probe/run_step.py b/environments/memory_probe/run_step.py
+new file mode 100644
+index 0000000..f4c69eb
+--- /dev/null
++++ b/environments/memory_probe/run_step.py
+@@ -0,0 +1,71 @@
++"""Step execution for memory_probe.
++
++The user prompt is the probe. The agent may use its shell and its memory tools;
++the episode ends when it replies without a tool call (that reply is the answer).
++"""
++
++import json
++
++from states import WORKSPACE, ProbeState
++from tools import TOOL_NAMES
++
++from agent_interp_envs import memory
++from agent_interp_envs.checkpoint import CHECKPOINT_ROOT
++from agent_interp_envs.print_helpers import print_section
++from agent_interp_envs.providers.base import BaseProvider
++from agent_interp_envs.tool_calling import run_command, validate_and_get_command
++from agent_interp_envs.types import ToolResult
++
++MAX_TOOL_OUTPUT_CHARS = 30_000
++
++
++def finish(state: ProbeState) -> None:
++    memory.export(CHECKPOINT_ROOT)
++    final = CHECKPOINT_ROOT / "final"
++    final.mkdir(parents=True, exist_ok=True)
++    (final / "result.json").write_text(json.dumps({
++        "final_response": state.final_response,
++        "final_truncated": state.final_truncated,
++        "steps": state.step + 1,
++        "memory_calls": state.memory_calls,
++        "num_commands": len(state.commands_executed),
++    }, indent=1))
++
++
++def run_step(provider: BaseProvider, state: ProbeState, config: dict) -> bool:
++    task_config = config.get("task", {})
++    result = validate_and_get_command(provider, allowed_tools=set(TOOL_NAMES), treat_no_tool_call_as_done=True)
++
++    if result.error_type == "no_tool_call":
++        state.final_response = (result.response.response or "") if result.response else ""
++        last = provider.messages[-1] if provider.messages else {}
++        state.final_truncated = last.get("finish_reason") == "length"
++        finish(state)
++        return True
++    if not result.success:
++        return False
++
++    name = result.tool_call.name
++    if name == "execute_command":
++        rc, output = run_command(result.command, timeout=task_config.get("command_timeout", 120), cwd=str(WORKSPACE))
++        state.commands_executed.append({"step": state.step, "command": result.command,
++                                        "output": (output or "")[:2000], "return_code": rc})
++        if not output.strip():
++            output = f"(Command completed with exit code {rc}, no output)"
++        if len(output) > MAX_TOOL_OUTPUT_CHARS:
++            half = MAX_TOOL_OUTPUT_CHARS // 2
++            omitted = len(output) - 2 * half
++            output = output[:half] + f"\n[... output truncated: {omitted} characters omitted ...]\n" + output[-half:]
++    else:
++        output, record = memory.handle(name, result.args or {})
++        record["step"] = state.step
++        state.memory_calls.append(record)
++
++    provider.add_tool_result(ToolResult(id=result.tool_call.id, name=name, content=output))
++    if result.response.reasoning:
++        print_section("REASONING", result.response.reasoning)
++    if result.response.response:
++        print_section("RESPONSE", result.response.response)
++    print_section("TOOL CALL", f"Function: {name}\nArguments: {result.tool_call.arguments}")
++    print_section("TOOL RESULT", output)
++    return False
+diff --git a/environments/memory_probe/states.py b/environments/memory_probe/states.py
+new file mode 100644
+index 0000000..c63a63d
+--- /dev/null
++++ b/environments/memory_probe/states.py
+@@ -0,0 +1,55 @@
++"""State and checkpointing for memory_probe."""
++
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Any
++
++from tools import get_tools
++
++from agent_interp_envs import checkpoint
++from agent_interp_envs.checkpoint import CHECKPOINT_ROOT, BaseState, ManifestSnapshot
++from agent_interp_envs.memory import dump_discarded
++from agent_interp_envs.providers.base import BaseProvider
++
++WORKSPACE = Path("/home/dev")
++
++
++@dataclass
++class ProbeState(BaseState):
++    """step; every shell command; every memory tool call (reads with ids found,
++    writes with full content); the final no-tool-call reply; whether the final
++    turn was cut by max_tokens."""
++    step: int = 0
++    commands_executed: list[dict[str, Any]] = field(default_factory=list)
++    memory_calls: list[dict[str, Any]] = field(default_factory=list)
++    final_response: str | None = None
++    final_truncated: bool = False
++
++
++_snapshot: ManifestSnapshot | None = None
++
++
++def _new_snapshot() -> ManifestSnapshot:
++    return ManifestSnapshot(
++        roots=(WORKSPACE, Path("/tmp")),
++        exclude_prefixes=(str(CHECKPOINT_ROOT), "/tmp/.fs_blob_cache", "/tmp/config.yaml"),
++        exclude_names=("__pycache__",),
++        baseline_roots=(WORKSPACE,),
++    )
++
++
++def init_fs_tracking() -> None:
++    global _snapshot
++    _snapshot = _new_snapshot()
++    _snapshot.prime()
++
++
++def dump(state: ProbeState, provider: BaseProvider, output_dir: Path) -> None:
++    checkpoint.dump(state, provider, output_dir, _snapshot)
++    dump_discarded(provider, output_dir)
++
++
++def restore(config: dict, checkpoint_dir: Path) -> tuple[ProbeState, BaseProvider]:
++    global _snapshot
++    _snapshot = _new_snapshot()
++    return checkpoint.restore(ProbeState, config, checkpoint_dir, get_tools(config), _snapshot)
+diff --git a/environments/memory_probe/tools.py b/environments/memory_probe/tools.py
+new file mode 100644
+index 0000000..29e17ce
+--- /dev/null
++++ b/environments/memory_probe/tools.py
+@@ -0,0 +1,10 @@
++"""Tool definitions for memory_probe: the standard shell plus the memory tools."""
++
++from agent_interp_envs.memory import MEMORY_TOOL_NAMES, MEMORY_TOOLS
++from agent_interp_envs.tool_calling import EXECUTE_COMMAND_TOOL
++
++TOOL_NAMES = {"execute_command", *MEMORY_TOOL_NAMES}
++
++
++def get_tools(config: dict) -> list[dict]:
++    return [EXECUTE_COMMAND_TOOL, *MEMORY_TOOLS]
+diff --git a/src/agent_interp_envs/memory.py b/src/agent_interp_envs/memory.py
+new file mode 100644
+index 0000000..8637531
+--- /dev/null
++++ b/src/agent_interp_envs/memory.py
+@@ -0,0 +1,181 @@
++"""Persistent agent memory: a MEMORY.md index plus read_memory / write_memory tools.
++
++The store lives in root-only /opt/memory, so the agent reaches it only through
++the two tools (never through its dev shell); every access is a tool call in the
++transcript. The planted memories come from the config:
++
++    task:
++      memories:            # list; empty or absent = an empty store
++        - memory_id: ...
++          short_description: ...
++          memory: |
++            ...markdown...
++
++The index (MEMORY.md) is rendered into the system prompt at session start,
++after `prompts.memory_preamble` (prompt text lives in the config). A
++write_memory call writes the file and updates MEMORY.md on disk; the system
++prompt already sent is not changed mid-session. The container is per-rollout,
++so writes never reach another session. At episode end the store is copied to
++<output>/final/memory/ so written memories are part of the record.
++"""
++
++import json
++import re
++import shutil
++from pathlib import Path
++
++MEMORY_DIR = Path("/opt/memory")
++INDEX_NAME = "MEMORY.md"
++
++READ_MEMORY_TOOL = {
++    "type": "function",
++    "function": {
++        "name": "read_memory",
++        "description": "Read one or more memories from your persistent memory by id. Returns the contents of all requested memories concatenated together.",
++        "parameters": {
++            "type": "object",
++            "properties": {
++                "memory_ids": {
++                    "type": "array",
++                    "items": {"type": "string"},
++                    "description": "The ids of the memories to read (one or more).",
++                },
++            },
++            "required": ["memory_ids"],
++        },
++    },
++}
++
++WRITE_MEMORY_TOOL = {
++    "type": "function",
++    "function": {
++        "name": "write_memory",
++        "description": "Write a memory to your persistent memory. It is listed in MEMORY.md (id and short description) in future sessions, where it can be read with read_memory.",
++        "parameters": {
++            "type": "object",
++            "properties": {
++                "memory_id": {
++                    "type": "string",
++                    "description": "The id used to retrieve this memory later.",
++                },
++                "memory": {
++                    "type": "string",
++                    "description": "The memory itself, formatted as markdown.",
++                },
++                "short_description": {
++                    "type": "string",
++                    "description": "A short summary (2 sentences max) of what the memory contains.",
++                },
++            },
++            "required": ["memory_id", "memory", "short_description"],
++        },
++    },
++}
++
++MEMORY_TOOLS = [READ_MEMORY_TOOL, WRITE_MEMORY_TOOL]
++MEMORY_TOOL_NAMES = {"read_memory", "write_memory"}
++
++
++def _filename(memory_id: str) -> str:
++    return re.sub(r"[^A-Za-z0-9._-]", "_", memory_id.strip())[:120] or "_"
++
++
++def _load_index() -> list[dict]:
++    p = MEMORY_DIR / "index.json"
++    return json.loads(p.read_text()) if p.exists() else []
++
++
++def _save_index(entries: list[dict]) -> None:
++    (MEMORY_DIR / "index.json").write_text(json.dumps(entries, indent=1))
++    (MEMORY_DIR / INDEX_NAME).write_text(render_index(entries))
++
++
++def render_index(entries: list[dict]) -> str:
++    lines = ["# MEMORY.md", ""]
++    lines += [f"- {e['memory_id']}: {e['short_description']}" for e in entries]
++    return "\n".join(lines) + "\n"
++
++
++def install(memories: list[dict] | None) -> None:
++    """Create the store from the config's planted memories (entrypoint, as root)."""
++    if MEMORY_DIR.exists():
++        shutil.rmtree(MEMORY_DIR)
++    MEMORY_DIR.mkdir(parents=True)
++    MEMORY_DIR.chmod(0o700)
++    entries = []
++    for m in memories or []:
++        (MEMORY_DIR / (_filename(m["memory_id"]) + ".md")).write_text(m["memory"])
++        entries.append({"memory_id": m["memory_id"], "short_description": m["short_description"]})
++    _save_index(entries)
++
++
++def system_prompt_with_memory(system_prompt: str, preamble: str, full: bool = False) -> str:
++    """MEMORY.md index after the preamble. With full=True (task.memory_in_context)
++    every memory's content follows the index, in the same format read_memory returns."""
++    index = (MEMORY_DIR / INDEX_NAME).read_text()
++    out = system_prompt.rstrip() + "\n\n" + preamble.strip() + "\n\n" + index
++    if full:
++        parts = [f"=== memory_id: {e['memory_id']} ===\n{(MEMORY_DIR / (_filename(e['memory_id']) + '.md')).read_text().rstrip()}"
++                 for e in _load_index()]
++        if parts:
++            out = out.rstrip() + "\n\n" + "\n\n".join(parts) + "\n"
++    return out
++
++
++def _ids(args: dict) -> list[str]:
++    ids = args.get("memory_ids")
++    if ids is None and "memory_id" in args:
++        ids = args["memory_id"]
++    if isinstance(ids, str):
++        try:
++            parsed = json.loads(ids)
++            ids = parsed if isinstance(parsed, list) else [ids]
++        except ValueError:
++            ids = [ids]
++    return [str(i) for i in ids or []]
++
++
++def handle(tool_name: str, args: dict) -> tuple[str, dict]:
++    """Execute a memory tool call. Returns (tool result text, record for state)."""
++    if tool_name == "read_memory":
++        ids = _ids(args)
++        if not ids:
++            return "Error: read_memory requires at least one memory id in memory_ids.", {"tool": tool_name, "ids": [], "found": []}
++        parts, found = [], []
++        for mid in ids:
++            p = MEMORY_DIR / (_filename(mid) + ".md")
++            if p.exists():
++                parts.append(f"=== memory_id: {mid} ===\n{p.read_text().rstrip()}")
++                found.append(mid)
++            else:
++                parts.append(f"=== memory_id: {mid} ===\nError: no memory with id '{mid}'.")
++        return "\n\n".join(parts) + "\n", {"tool": tool_name, "ids": ids, "found": found}
++
++    if tool_name == "write_memory":
++        mid = str(args.get("memory_id") or "").strip()
++        memory = args.get("memory")
++        desc = args.get("short_description")
++        missing = [k for k, v in (("memory_id", mid), ("memory", memory), ("short_description", desc)) if not v]
++        if missing:
++            return f"Error: write_memory is missing required argument(s): {', '.join(missing)}.", {"tool": tool_name, "error": missing}
++        (MEMORY_DIR / (_filename(mid) + ".md")).write_text(str(memory))
++        entries = [e for e in _load_index() if e["memory_id"] != mid]
++        entries.append({"memory_id": mid, "short_description": str(desc)})
++        _save_index(entries)
++        return f"Memory '{mid}' saved.", {"tool": tool_name, "memory_id": mid, "short_description": str(desc), "memory": str(memory)}
++
++    raise ValueError(tool_name)
++
++
++def export(output_root: Path) -> None:
++    """Copy the store into <output_root>/final/memory (end of episode)."""
++    dest = Path(output_root) / "final" / "memory"
++    if MEMORY_DIR.exists():
++        shutil.copytree(MEMORY_DIR, dest, dirs_exist_ok=True)
++
++
++def dump_discarded(provider, output_dir: Path) -> None:
++    """Resampled-away turns (see VLLMProvider.revert_last_turn), if any."""
++    discarded = getattr(provider, "discarded", None)
++    if discarded:
++        (Path(output_dir) / "discarded.json").write_text(json.dumps(discarded, indent=2))
+diff --git a/src/agent_interp_envs/providers/__init__.py b/src/agent_interp_envs/providers/__init__.py
+index 2be7824..d6fff03 100644
+--- a/src/agent_interp_envs/providers/__init__.py
++++ b/src/agent_interp_envs/providers/__init__.py
+@@ -14,6 +14,7 @@ from agent_interp_envs.providers.mock_provider import MockProvider
+ from agent_interp_envs.providers.moonshot_provider import MoonshotProvider
+ from agent_interp_envs.providers.openai_provider import OpenAIProvider
+ from agent_interp_envs.providers.openrouter_provider import OpenRouterProvider
++from agent_interp_envs.providers.vllm_provider import VLLMProvider
+ 
+ 
+ class UnknownProvider(Exception):
+@@ -30,6 +31,7 @@ PROVIDERS = {
+     "moonshot": MoonshotProvider,
+     "openai": OpenAIProvider,
+     "openrouter": OpenRouterProvider,
++    "vllm": VLLMProvider,
+ }
+ 
+ 
+@@ -109,6 +111,7 @@ def _create_provider(
+     reasoning_summary: str | None = None,
+     rejection: dict | None = None,
+     mock_script: list[str] | None = None,
++    max_tokens: int | None = None,
+ ) -> BaseProvider:
+     """Create an LLM provider instance.
+ 
+@@ -221,6 +224,9 @@ def _create_provider(
+             tools=tools,
+             reasoning_effort=reasoning_effort,
+         ))
++    if provider == "vllm":
++        return provider_class(model=model, messages=messages, tools=tools,
++                              temperature=temperature, top_p=top_p, max_tokens=max_tokens)
+     if provider == "mock":
+         return provider_class(model=model, messages=messages, tools=tools,
+                               mock_script=list(mock_script) if mock_script else None)
+diff --git a/src/agent_interp_envs/providers/vllm_provider.py b/src/agent_interp_envs/providers/vllm_provider.py
+new file mode 100644
+index 0000000..909e49e
+--- /dev/null
++++ b/src/agent_interp_envs/providers/vllm_provider.py
+@@ -0,0 +1,217 @@
++"""Self-hosted model behind a vLLM OpenAI-compatible server (chat completions).
++
++The server URL comes from VLLM_BASE_URL (e.g. http://host.docker.internal:8000/v1).
++Requests are streamed so a long thinking turn never sits on an idle connection
++(the server is reached through an SSH tunnel), and the stream is reassembled
++here into one assistant message.
++
++Every assistant message keeps, next to the standard chat fields:
++  reasoning_content  the model's thinking (vLLM reasoning parser output)
++  finish_reason      "stop" / "tool_calls" / "length" ("length" = hit max_tokens: truncated)
++  usage              prompt/completion token counts for the turn
++Those extras are stripped from the history sent back to the server, except
++reasoning_content, which is handed to the chat template (the template decides
++whether past thinking is rendered).
++"""
++
++import json
++import os
++import time
++
++
++from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
++
++from agent_interp_envs.print_helpers import print_section, print_step_header
++from agent_interp_envs.providers.base import BaseProvider
++from agent_interp_envs.types import LLMResponse, ToolCall, ToolResult
++
++_SEND_KEYS = ("role", "content", "tool_calls", "tool_call_id", "name", "reasoning_content")
++
++
++class VLLMProvider(BaseProvider):
++    def __init__(
++        self,
++        model: str,
++        messages: list[dict],
++        tools: list[dict],
++        temperature: float | None = None,
++        top_p: float | None = None,
++        max_tokens: int | None = None,
++    ) -> None:
++        base_url = os.environ.get("VLLM_BASE_URL", "http://host.docker.internal:8000/v1")
++        self.client = OpenAI(base_url=base_url, api_key=os.environ.get("VLLM_API_KEY", "EMPTY"),
++                             # Non-streaming by default: llama-server re-parses the whole partial
++                             # message on every streamed token (quadratic in output length), which
++                             # made the CPU-bound server several times slower. VLLM_STREAM=1 restores
++                             # streaming. A dead tunnel resets the connection, so it still errors fast.
++                             timeout=float(os.environ.get("VLLM_TIMEOUT", "14400")), max_retries=0)
++        self.stream = os.environ.get("VLLM_STREAM", "0") == "1"
++        self.model = model
++        self.messages = messages
++        self.discarded: list[dict] = []
++        self.kwargs: dict = {}
++        if tools:
++            self.kwargs["tools"] = tools
++            self.kwargs["parallel_tool_calls"] = False
++        if temperature is not None:
++            self.kwargs["temperature"] = temperature
++        if top_p is not None:
++            self.kwargs["top_p"] = top_p
++        if max_tokens is not None:
++            self.kwargs["max_tokens"] = max_tokens
++
++    def _wire_messages(self) -> list[dict]:
++        out = []
++        for m in self.messages:
++            w = {k: m[k] for k in _SEND_KEYS if k in m and m[k] is not None}
++            if w.get("role") == "assistant" and "content" not in w:
++                w["content"] = ""
++            out.append(w)
++        return out
++
++    def _complete_once(self) -> dict:
++        resp = self.client.chat.completions.create(model=self.model, messages=self._wire_messages(), **self.kwargs)
++        choice = resp.choices[0]
++        msg = choice.message
++        extra = msg.model_extra or {}
++        tool_calls = [{"id": tc.id or f"call_{int(time.time() * 1000)}_{i}", "type": "function",
++                       "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
++                      for i, tc in enumerate(msg.tool_calls or [])]
++        return {
++            "role": "assistant",
++            "content": msg.content or None,
++            "reasoning_content": extra.get("reasoning_content") or extra.get("reasoning") or None,
++            "tool_calls": tool_calls or None,
++            "finish_reason": choice.finish_reason,
++            "usage": resp.usage.model_dump() if resp.usage else None,
++        }
++
++    def _stream_once(self) -> dict:
++        stream = self.client.chat.completions.create(
++            model=self.model,
++            messages=self._wire_messages(),
++            stream=True,
++            stream_options={"include_usage": True},
++            **self.kwargs,
++        )
++        content: list[str] = []
++        reasoning: list[str] = []
++        calls: dict[int, dict] = {}
++        finish_reason = None
++        usage = None
++        for chunk in stream:
++            if chunk.usage is not None:
++                usage = chunk.usage.model_dump()
++            if not chunk.choices:
++                continue
++            choice = chunk.choices[0]
++            if choice.finish_reason:
++                finish_reason = choice.finish_reason
++            delta = choice.delta
++            if delta is None:
++                continue
++            extra = delta.model_extra or {}
++            r = extra.get("reasoning_content") or extra.get("reasoning")
++            if r:
++                reasoning.append(r)
++            if delta.content:
++                content.append(delta.content)
++            for tc in delta.tool_calls or []:
++                slot = calls.setdefault(tc.index, {"id": None, "type": "function",
++                                                   "function": {"name": "", "arguments": ""}})
++                if tc.id:
++                    slot["id"] = tc.id
++                if tc.function is not None:
++                    if tc.function.name:
++                        slot["function"]["name"] += tc.function.name
++                    if tc.function.arguments:
++                        slot["function"]["arguments"] += tc.function.arguments
++        tool_calls = []
++        for i in sorted(calls):
++            slot = calls[i]
++            if not slot["id"]:
++                slot["id"] = f"call_{int(time.time() * 1000)}_{i}"
++            tool_calls.append(slot)
++        message = {
++            "role": "assistant",
++            "content": "".join(content) or None,
++            "reasoning_content": "".join(reasoning) or None,
++            "tool_calls": tool_calls or None,
++            "finish_reason": finish_reason,
++            "usage": usage,
++        }
++        return message
++
++    def invoke(self) -> LLMResponse:
++        # Transient failures (server unreachable: tunnel or network down, 5xx) are
++        # retried for up to RETRY_WINDOW seconds, so an outage pauses the episode
++        # instead of failing it. A turn cut off mid-stream is re-sampled from scratch.
++        delay = 5
++        deadline = time.time() + int(os.environ.get("VLLM_RETRY_WINDOW", "7200"))
++        attempt = 0
++        while True:
++            attempt += 1
++            try:
++                message = self._stream_once() if self.stream else self._complete_once()
++                break
++            except APIStatusError as e:
++                # 4xx (bad request, context overflow) is not transient: surface it.
++                if e.status_code < 500 or time.time() > deadline:
++                    raise
++            except (APIConnectionError, APITimeoutError):
++                if time.time() > deadline:
++                    raise
++            print(f"[provider-retry] attempt {attempt} failed; sleeping {delay}s", flush=True)
++            time.sleep(delay)
++            delay = min(delay * 2, 120)
++        self.messages.append(message)
++        if message["finish_reason"] == "length":
++            print("[truncated] generation hit max_tokens (finish_reason=length)", flush=True)
++        tool_calls = [
++            ToolCall(id=tc["id"], name=tc["function"]["name"], arguments=tc["function"]["arguments"])
++            for tc in message.get("tool_calls") or []
++        ]
++        return LLMResponse(
++            reasoning=message.get("reasoning_content"),
++            response=message.get("content"),
++            tool_calls=tool_calls,
++        )
++
++    def add_tool_result(self, tool_result: ToolResult) -> None:
++        self.messages.append({"role": "tool", "tool_call_id": tool_result.id, "content": tool_result.content})
++
++    def revert_last_turn(self) -> None:
++        # The harness resamples invalid turns (parallel calls, bad JSON, ...).
++        # Keep each discarded sample: environments dump `discarded` to
++        # discarded.json next to messages.json, so no generated text is lost.
++        self.discarded.append({"after_message_index": len(self.messages) - 1, "message": self.messages[-1]})
++        self.messages = self.messages[:-1]
++
++
++    def dump_history(self) -> str:
++        return json.dumps(self.messages, indent=2)
++
++    def print_history(self) -> None:
++        step = 0
++        for i, msg in enumerate(self.messages):
++            role = msg["role"]
++            if role == "system":
++                print()
++                print_section("SYSTEM PROMPT", msg["content"])
++            elif role == "user" and i == 1:
++                print_section("USER_PROMPT", msg["content"])
++            elif role == "assistant":
++                print_step_header(step)
++                if msg.get("reasoning_content"):
++                    print()
++                    print_section("REASONING", msg["reasoning_content"])
++                if msg.get("content"):
++                    print_section("RESPONSE", msg["content"])
++                for tc in msg.get("tool_calls") or []:
++                    print_section("TOOL CALL", f"Function: {tc['function']['name']}\nArguments: {tc['function']['arguments']}")
++            elif role == "tool":
++                print_section("TOOL RESULT", msg["content"])
++                step += 1
++            elif role == "user":
++                print_section("USER MESSAGE", msg["content"])
++                step += 1
