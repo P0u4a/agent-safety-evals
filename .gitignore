@@ -14,7 +14,30 @@ agent-interp-envs/
 /value_leakage/
 
 # Generated / large outputs
-results/
+# Only published JSON summaries are tracked; raw run artifacts stay local.
+/results/*
+!/results/agentic_effort_20261108/
+/results/agentic_effort_20261108/*
+!/results/deployment_followup_20261108/
+/results/deployment_followup_20261108/*
+!/results/gemma_comparison_20261113/
+/results/gemma_comparison_20261113/*
+!/results/general_agent_4bit_20261106/
+/results/general_agent_4bit_20261106/*
+!/results/lfm_funding_checkpoint_v2_20261114/
+/results/lfm_funding_checkpoint_v2_20261114/*
+!/results/upward_documents/
+/results/upward_documents/*
+!/results/agentic_effort_20261108/final_summary.json
+!/results/deployment_followup_20261108/final_summary.json
+!/results/gemma_comparison_20261113/final_summary.json
+!/results/general_agent_4bit_20261106/summary.json
+!/results/lfm_funding_checkpoint_v2_20261114/final_summary.json
+!/results/manifest.json
+!/results/release_validation.json
+!/results/upward_documents/calibration_summary.json
+!/results/upward_documents/documents_joined.json
+!/results/upward_documents/summary.json
 logs/
 experiment/jobs/
 experiment/hack_pool.jsonl

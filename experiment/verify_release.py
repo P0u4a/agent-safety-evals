@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     checked = 0
-    for manifest in ('experiment/inputs/manifest.json', 'reports/manifest.json'):
+    for manifest in ('experiment/inputs/manifest.json', 'results/manifest.json'):
         entries = json.loads((ROOT / manifest).read_text())
         for name, record in entries.items():
             path = (ROOT / name).resolve()

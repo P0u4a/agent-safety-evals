@@ -6,15 +6,15 @@ Code and result summaries for the five environments in the LFM3 safety article. 
 
 | Environment / condition | Main entry point | Report |
 | --- | --- | --- |
-| Funding Email and Broken Calculator, original instructions, 100 each | `experiment/run_general_agent.py` | [Baseline results](reports/general_agent_4bit_20261106/RESULTS.md) |
-| Study Assistant, 100; Grade Lookup, 50 per student; 20 separate healthy controls | `experiment/run_documents_evaluation.py` | [Document results](reports/upward_documents/summary.json) |
-| Agentic Effort, 850 trajectories and 850 separate preference responses | `experiment/run_agentic_effort.py` | [Effort results](reports/agentic_effort_20261108/RESULTS.md) |
-| Deployment policy: funding 100, transfers 50 concerning + 50 benign, separate comprehension | `experiment/run_deployment_followup.py` | [Deployment results](reports/deployment_followup_20261108/RESULTS.md) |
-| Corrected separate funding comprehension, 20 | `experiment/run_funding_comprehension_v2.py` | Included in deployment report |
-| Funding evidence and same-conversation review checkpoint, LFM 100 | `experiment/run_lfm_funding_checkpoint_v2.py` | [Checkpoint results](reports/lfm_funding_checkpoint_v2_20261114/RESULTS.md) |
-| Gemma targeted comparison: funding 100, transfers 50 + 50 | `experiment/run_gemma_comparison.py` | [Gemma results](reports/gemma_comparison_20261113/RESULTS.md) |
+| Funding Email and Broken Calculator, original instructions, 100 each | `experiment/run_general_agent.py` | [Baseline results](results/general_agent_4bit_20261106/summary.json) |
+| Study Assistant, 100; Grade Lookup, 50 per student; 20 separate healthy controls | `experiment/run_documents_evaluation.py` | [Document results](results/upward_documents/summary.json) |
+| Agentic Effort, 850 trajectories and 850 separate preference responses | `experiment/run_agentic_effort.py` | [Effort results](results/agentic_effort_20261108/final_summary.json) |
+| Deployment policy: funding 100, transfers 50 concerning + 50 benign, separate comprehension | `experiment/run_deployment_followup.py` | [Deployment results](results/deployment_followup_20261108/final_summary.json) |
+| Corrected separate funding comprehension, 20 | `experiment/run_funding_comprehension_v2.py` | Included in deployment results |
+| Funding evidence and same-conversation review checkpoint, LFM 100 | `experiment/run_lfm_funding_checkpoint_v2.py` | [Checkpoint results](results/lfm_funding_checkpoint_v2_20261114/final_summary.json) |
+| Gemma targeted comparison: funding 100, transfers 50 + 50 | `experiment/run_gemma_comparison.py` | [Gemma results](results/gemma_comparison_20261113/final_summary.json) |
 
-The main runners, prompts, rubrics, controls and analyses are under `experiment/`. `experiment/inputs/` contains frozen settings and job matrices needed by follow-ups; they do not require running earlier experiments again. `harness/` contains patches against the pinned upstream harness. `reports/` contains copies of historical summaries, with provenance and checksums in `reports/manifest.json`.
+The main runners, prompts, rubrics, controls and analyses are under `experiment/`. `experiment/inputs/` contains frozen settings and job matrices needed by follow-ups; they do not require running earlier experiments again. `harness/` contains patches against the pinned upstream harness. `results/` contains the published JSON summaries, with provenance and checksums in `results/manifest.json`.
 
 Unreported memory experiments, Secret Number, cloud launch scripts, performance tuning, canceled runners and unreported Gemma funding interventions are excluded from the source release. Small fixtures reused to test the reported harness are retained with provenance. The funding harness still needs its historical memory compatibility library, but the reported funding configurations expose no memory tools and plant no memories.
 
