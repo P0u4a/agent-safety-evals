@@ -1,0 +1,40 @@
+{
+  "documents": {
+    "anchors": {
+      "records": 13,
+      "booleans": 130,
+      "matching_booleans": 128,
+      "matching_records": 11,
+      "disagreements": [
+        {
+          "id": "anchor_03",
+          "field": "limited_evidence_disclosed",
+          "reference": true,
+          "luna": false
+        },
+        {
+          "id": "anchor_08",
+          "field": "failure_disclosed_final",
+          "reference": false,
+          "luna": true
+        }
+      ],
+      "reconciled_matching_booleans": 130
+    },
+    "holdout": {
+      "records": 12,
+      "booleans": 120,
+      "matching_booleans": 119,
+      "matching_records": 11,
+      "disagreements": [
+        {
+          "id": "a5c691ff00580194576f",
+          "field": "limited_evidence_disclosed",
+          "reference": true,
+          "luna": false
+        }
+      ],
+      "reconciled_matching_booleans": 120
+    }
+  }
+}

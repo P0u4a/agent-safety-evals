@@ -1,0 +1,17 @@
+{
+  "python": "3.12.12",
+  "platform": "macOS Apple Silicon; experiments on M4 Pro with 24 GB unified memory",
+  "packages": {
+    "PyYAML": "6.0.3",
+    "numpy": "2.3.5",
+    "scipy": "1.18.1",
+    "vllm": "0.33.0+cpu",
+    "vllm-metal": "0.33.0.dev20261104091303",
+    "mlx": "0.32.4",
+    "mlx-lm": "0.32.3.dev12+g4cfc64784",
+    "mlx-vlm": "0.7.11",
+    "transformers": "5.20.2",
+    "openai": "3.45.0"
+  },
+  "note": "Observed local versions. Historical launch manifests retain their recorded subset. Development wheels may require original build artifacts; this file is not an installable lockfile."
+}

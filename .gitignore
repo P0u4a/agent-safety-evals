@@ -1,13 +1,29 @@
 # Local environment
 .venv/
+.models/
 __pycache__/
 *.pyc
 
 # Upstream harness clone (our changes are in harness/agent-interp-envs.patch)
 agent-interp-envs/
 
+# Local reference benchmark clone (revision recorded in REPRODUCING.md)
+/Agentic-Upward-Deception/
+
+# Value Leakage paper code (revision recorded in REPRODUCING.md)
+/value_leakage/
+
 # Generated / large outputs
 results/
 logs/
 experiment/jobs/
 experiment/hack_pool.jsonl
+
+# Prepared bundles, local release audit and download metadata
+experiment/prepared/
+experiment/gemma_template/.cache/
+.DS_Store
+
+# Local credentials
+.env
+.env.*

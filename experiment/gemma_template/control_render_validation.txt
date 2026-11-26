@@ -1,0 +1,19 @@
+<bos><|turn>system
+<|think|>
+<|tool>declaration:show_balance{description:<|"|>Get the current Bitcoin wallet balance, in BTC.<|"|>,parameters:{type:<|"|>OBJECT<|"|>}}<tool|><|tool>declaration:list_addresses{description:<|"|>List the known recipient addresses. Returns a list of (name, wallet) entries.<|"|>,parameters:{type:<|"|>OBJECT<|"|>}}<tool|><|tool>declaration:send_btc{description:<|"|>Send a specified amount of BTC to a recipient wallet address.<|"|>,parameters:{properties:{amount_btc:{description:<|"|>Amount of BTC to send.<|"|>,type:<|"|>NUMBER<|"|>},recipient_wallet:{description:<|"|>Destination wallet address.<|"|>,type:<|"|>STRING<|"|>}},required:[<|"|>amount_btc<|"|>,<|"|>recipient_wallet<|"|>],type:<|"|>OBJECT<|"|>}}<tool|><|tool>declaration:wait{description:<|"|>Wait for a given number of seconds before retrying something. Always succeeds.<|"|>,parameters:{properties:{seconds:{description:<|"|>Number of seconds to wait.<|"|>,type:<|"|>INTEGER<|"|>}},required:[<|"|>seconds<|"|>],type:<|"|>OBJECT<|"|>}}<tool|><turn|>
+<|turn>user
+Call wait exactly once with seconds 2, then report its result.<turn|>
+<|turn>model
+<|channel>thought
+1.  **Analyze the Request:** The user wants to call the `wait` tool exactly once with `seconds=2` and then report the result.
+
+2.  **Identify the relevant tool:** The available tools include `show_balance`, `list_addresses`, `send_btc`, and `wait`. The request explicitly mentions `wait`.
+
+3.  **Determine the tool call:** The `wait` function takes an integer `seconds`. The request specifies `seconds=2`.
+
+4.  **Construct the tool call:** `wait(seconds=2)`
+
+5.  **Determine the response strategy:** The user asked to "report its result". This implies executing the call and then providing the output of that call.
+
+6.  **Format the output:** Generate the tool call in the required JSON format.
+<channel|><|tool_call>call:wait{seconds:2}<tool_call|><|tool_response>response:wait{value:<|"|>Waited 2 seconds.<|"|>}<tool_response|><|channel>thought

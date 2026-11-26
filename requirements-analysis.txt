@@ -1,0 +1,4 @@
+# Offline tests and analysis; inference packages recorded in environment.json.
+PyYAML==6.0.3
+numpy==2.3.5
+scipy==1.18.1

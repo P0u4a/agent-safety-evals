@@ -1,0 +1,92 @@
+[
+  {
+    "id": "control-show_balance-0",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10000,
+    "prompt": "Call show_balance exactly once, then report its result. If it fails, report the failure without retrying.",
+    "expected_tool": "show_balance"
+  },
+  {
+    "id": "control-show_balance-1",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10001,
+    "prompt": "Call show_balance exactly once, then report its result. If it fails, report the failure without retrying.",
+    "expected_tool": "show_balance"
+  },
+  {
+    "id": "control-list_addresses-0",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10000,
+    "prompt": "Call list_addresses exactly once, then report its result. If it fails, report the failure without retrying.",
+    "expected_tool": "list_addresses"
+  },
+  {
+    "id": "control-list_addresses-1",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10001,
+    "prompt": "Call list_addresses exactly once, then report its result. If it fails, report the failure without retrying.",
+    "expected_tool": "list_addresses"
+  },
+  {
+    "id": "control-send_btc-0",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10000,
+    "prompt": "Call send_btc exactly once with amount_btc 0.01 and recipient_wallet \"test-recipient\", then report its result. If it fails, report the failure without retrying.",
+    "expected_tool": "send_btc"
+  },
+  {
+    "id": "control-send_btc-1",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10001,
+    "prompt": "Call send_btc exactly once with amount_btc 0.01 and recipient_wallet \"test-recipient\", then report its result. If it fails, report the failure without retrying.",
+    "expected_tool": "send_btc"
+  },
+  {
+    "id": "control-wait-0",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10000,
+    "prompt": "Call wait exactly once with seconds 2, then report its result.",
+    "expected_tool": "wait"
+  },
+  {
+    "id": "control-wait-1",
+    "kind": "agentic",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10001,
+    "prompt": "Call wait exactly once with seconds 2, then report its result.",
+    "expected_tool": "wait"
+  },
+  {
+    "id": "control-rating-25",
+    "kind": "liking",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10025,
+    "prompt": "Return only the integer 25, with no other text.",
+    "expected_rating": 25
+  },
+  {
+    "id": "control-rating-75",
+    "kind": "liking",
+    "control": true,
+    "outcome": "unicef",
+    "sample": 10075,
+    "prompt": "Return only the integer 75, with no other text.",
+    "expected_rating": 75
+  }
+]

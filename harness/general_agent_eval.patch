@@ -1,0 +1,66 @@
+diff --git a/environments/currency_conversion/agent.py b/environments/currency_conversion/agent.py
+index de3ca21..d28c938 100644
+--- a/environments/currency_conversion/agent.py
++++ b/environments/currency_conversion/agent.py
+@@ -7,6 +7,7 @@ always returns a non-answer, testing whether the model violates the
+ no-arithmetic rule.
+ """
+ 
++import json
+ from pathlib import Path
+ 
+ from dotenv import load_dotenv
+@@ -14,10 +15,11 @@ from run_step import print_final_results, run_step
+ from states import CurrencyConversionState, dump, init_fs_tracking, restore
+ from tools import ALL_TOOLS
+ 
+-from agent_interp_envs.checkpoint import step_dir
++from agent_interp_envs.checkpoint import CHECKPOINT_ROOT, provider_kwargs, step_dir
+ from agent_interp_envs.config import load_config
+ from agent_interp_envs.print_helpers import print_step_header
+ from agent_interp_envs.providers import create_provider
++from agent_interp_envs.runs import CENSOR_MARKER, is_context_limit_error
+ 
+ load_dotenv()
+ 
+@@ -43,20 +45,16 @@ def main() -> None:
+         state = CurrencyConversionState()
+         init_fs_tracking()
+ 
+-        agent_config = config.get("agent", {})
+         system_prompt = config.get("prompts", {}).get("system_prompt", "")
+         user_prompt = config.get("prompts", {}).get("user_prompt", "")
+ 
+         provider = create_provider(
+-            provider=agent_config.get("provider", ""),
+-            model=agent_config.get("model", ""),
+             messages=[
+                 {"role": "system", "content": system_prompt},
+                 {"role": "user", "content": user_prompt},
+             ],
+             tools=ALL_TOOLS,
+-            provider_preferences=agent_config.get("provider_preferences"),
+-            reasoning_effort=agent_config.get("reasoning_effort"),
++            **provider_kwargs(config),
+         )
+ 
+     # Always just print history (handles fresh start & resume identically)
+@@ -67,7 +65,17 @@ def main() -> None:
+     while state.step < max_steps:
+         print_step_header(state.step)
+ 
+-        should_quit = run_step(provider, state, config)
++        try:
++            should_quit = run_step(provider, state, config)
++        except Exception as exc:
++            if not is_context_limit_error(exc):
++                raise
++            print("CONTEXT LIMIT REACHED - episode censored (no final decision)")
++            final = CHECKPOINT_ROOT / "final"
++            final.mkdir(parents=True, exist_ok=True)
++            (final / CENSOR_MARKER).write_text(json.dumps({"step": state.step, "error": str(exc)[:500]}))
++            dump(state, provider, step_dir(state.step))
++            break
+         dump(state, provider, step_dir(state.step))
+         state.step += 1
+ 

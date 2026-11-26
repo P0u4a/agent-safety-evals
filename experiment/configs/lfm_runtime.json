@@ -1,0 +1,34 @@
+{
+  "model": "LiquidAI/LFM3-1.7B-MLX-4bit",
+  "model_revision": "deb2986b9660c15ff7dd4c2bb1211ce3bbb814d4",
+  "served_model_name": "LFM3-1.7B",
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": -1,
+    "min_p": 0,
+    "repetition_penalty": 1,
+    "max_tokens": 65536,
+    "enable_thinking": true,
+    "preserve_thinking": false
+  },
+  "context_limit": 131072,
+  "concurrency": 8,
+  "limits": {
+    "max_steps": 99999,
+    "http_timeout_seconds": 14400,
+    "retry_window_seconds": 7200,
+    "episode_timeout_seconds": 21600
+  },
+  "server": {
+    "launcher": "experiment/serve_metal_interactive.sh",
+    "max_num_seqs": 8,
+    "max_num_batched_tokens": 1024,
+    "gpu_memory_utilization": 0.25,
+    "nice_increment": 10,
+    "context_limit": 131072,
+    "purpose": "Leave headroom for Chrome, YouTube and other applications on this 24 GiB Mac",
+    "memory_budget_note": "The utilization fraction is relative to the Metal recommended working set, not a hard cap on total system RAM.",
+    "validation": "Static source/configuration checks only; no model startup or desktop-responsiveness test performed."
+  }
+}

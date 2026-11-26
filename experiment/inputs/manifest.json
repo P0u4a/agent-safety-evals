@@ -1,0 +1,50 @@
+{
+  "experiment/inputs/agentic_effort_20261108/config.json": {
+    "source": "results/agentic_effort_20261108/config.json",
+    "sha256": "bb998673dc1ff3c12fbd212d2b70624bde63fa028da71dac8b4ef2ec0635cd95"
+  },
+  "experiment/inputs/general_agent_4bit_20261106/configs/funding_email.yaml": {
+    "source": "results/general_agent_4bit_20261106/configs/funding_email.yaml",
+    "sha256": "1bd0bef2a1c65947c1d499f6e38890cfc9d6c97d9bf812ad26ed0f29d2d46edf"
+  },
+  "experiment/inputs/general_agent_4bit_20261106/manifest.json": {
+    "source": "results/general_agent_4bit_20261106/manifest.json",
+    "sha256": "dec6da5c547c44f7ea680c9feaa2343dc5cac27fb48b3a11c13d97dfc4dc6c63"
+  },
+  "experiment/inputs/deployment_followup_20261108/config.json": {
+    "source": "results/deployment_followup_20261108/config.json",
+    "sha256": "2e8586a03d4aa423a0a8693fa719c244f0d3a4357af47401bce1975928d84239"
+  },
+  "experiment/inputs/deployment_followup_20261108/jobs.json": {
+    "source": "results/deployment_followup_20261108/jobs.json",
+    "sha256": "f45a74f77a1f66eb3073da821a7d16d7390a1760e07771867f63c4c5c1506332"
+  },
+  "experiment/inputs/deployment_followup_20261108/control_jobs.json": {
+    "source": "results/deployment_followup_20261108/control_jobs.json",
+    "sha256": "9bee37569bc9d6e7d28c8b844f2e73f9146448b5734f6e8225844e4e7df08375"
+  },
+  "experiment/inputs/funding_incontext_20261113/lfm/config.json": {
+    "source": "results/funding_incontext_20261113/lfm/config.json",
+    "sha256": "c0e038e18b30f62c6ffaff876ae08b588222f61961190236b859bfe030738da7"
+  },
+  "experiment/inputs/funding_incontext_20261113/lfm/jobs.json": {
+    "source": "results/funding_incontext_20261113/lfm/jobs.json",
+    "sha256": "fcff957f58d795a908f9f8383f279d1d5b7356681d73cf12e57be73a32f46e94"
+  },
+  "experiment/configs/lfm_runtime.json": {
+    "source": "Selected runtime fields from results/secret_number_20261107_v2/config.json",
+    "sha256": "1f5ee6ed36e4fd374e7d361f6fd38024af7c977ab1e220696ed14a93c7d38cd8"
+  },
+  "experiment/calibration/funding/funding_reference.jsonl": {
+    "source": "Synthetic-only records from results/metal_4bit/analysis/calibration/funding_reference.jsonl",
+    "sha256": "9aa90d914c8d469849af834c96ef56ea73be955ccada8fae93f685014f6a6121"
+  },
+  "experiment/calibration/funding/funding_blind.jsonl": {
+    "source": "Corresponding synthetic-only records from results/metal_4bit/analysis/calibration/funding_blind.jsonl",
+    "sha256": "4a2554e205f86326c653059c106cac4c59cfe6a51ec5a484a0b696ac0876f4bb"
+  },
+  "experiment/funding_checkpoint_v2/fixtures/malformed_updates.json": {
+    "source": "results/funding_incontext_20261113/gemma/analysis/malformed_updates.json",
+    "sha256": "06124c978785058647da1a133b358a9dd4af48dbf652374fc1fe1c54ff564a0a"
+  }
+}

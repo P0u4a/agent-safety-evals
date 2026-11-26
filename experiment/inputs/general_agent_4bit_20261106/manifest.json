@@ -1,0 +1,55 @@
+{
+  "model": "LiquidAI/LFM3-1.7B-MLX-4bit",
+  "model_revision": "deb2986b9660c15ff7dd4c2bb1211ce3bbb814d4",
+  "harness_commit": "310c03fbafdbb16df9ee043a7d9dd18a6d8cd3ec",
+  "packages": {
+    "vllm": "0.33.0+cpu",
+    "vllm-metal": "0.33.0.dev20261104091303",
+    "mlx": "0.32.4",
+    "mlx-lm": "0.32.3.dev12+g4cfc64784",
+    "mlx-vlm": "0.7.11"
+  },
+  "images": {
+    "funding_email": "sha256:f21175d913530bbccf04c3cd7cca89b6e67a47ae1078b8e31101d363a4eb11bf",
+    "currency_conversion": "sha256:c26cfa1690ef439838a55e22087e607484240656946a5f5359e678174f98d15f"
+  },
+  "image_tags": {
+    "funding_email": "em/funding_email:latest",
+    "currency_conversion": "em/currency_conversion:baseline-20261106"
+  },
+  "expected": {
+    "funding_email": 100,
+    "currency_conversion": 100
+  },
+  "concurrency": 74,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": -1,
+    "min_p": 0,
+    "repetition_penalty": 1,
+    "max_tokens": 65536,
+    "enable_thinking": true,
+    "preserve_thinking": false
+  },
+  "context_limit": 131072,
+  "max_steps": 99999,
+  "http_timeout_seconds": 14400,
+  "provider_retry_window_seconds": 7200,
+  "episode_timeout_seconds": 21600,
+  "infra_attempts": 3,
+  "memory": "No planted memories, memory preamble, or memory tools.",
+  "calculator_mode": "static_response (non-answer; no code)",
+  "order_seed": 20261106,
+  "sources": {
+    "experiment/run_general_agent.py": "b2c71c576fe3138c9a18c791016ec78e44991129e36b798a7e806805629fddf3",
+    "experiment/serve_metal.sh": "cae0c5e4d760daf5ca83d277c897aca251973db38a893a0bc27f768149e05ebf",
+    "experiment/configs/base.yaml": "799045a6afd81e4eea5344425d95d3919214fabe34ff52674d74a94d752325f1",
+    "harness/agent-interp-envs.patch": "2b0b86019f79cb904d7cfba775e74357a9d0f130358aec812f8c58c40e1c80c7",
+    "harness/general_agent_eval.patch": "4848163e0386b07ebe30da1cdb4468f895c95199ba6d74342151d3f28412ca23",
+    "results/general_agent_4bit_20261106/configs/funding_email.yaml": "1bd0bef2a1c65947c1d499f6e38890cfc9d6c97d9bf812ad26ed0f29d2d46edf",
+    "results/general_agent_4bit_20261106/configs/currency_conversion.yaml": "57726d8b40a64f2db9f2abf9eb4d2552167f6415d5dd99df6b9009e4dd4478bf"
+  },
+  "retry_policy": "Only nonzero-exit infrastructure failures; preserve attempts. Never retry cap hits, context censorship, or ordinary incomplete outputs.",
+  "analysis": "Raw traces and completion audit only. No Luna safety judgments yet."
+}
